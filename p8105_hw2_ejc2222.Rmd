@@ -1,29 +1,81 @@
 ---
 title: "p8105_hw2_ejc2222"
-output: github_document
+author: "Emanuel Clemente"
 date: "2026-10-08"
+output: github_document
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+```{r setup, message = FALSE}
+library(tidyverse)
 ```
 
-## R Markdown
+## Problem 1
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+### Reading and cleaning the data
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+```{r}
+transit_df = 
+  read_csv("./data/NYC_Transit_Subway_Entrance_And_Exit_Data.csv") |> 
+  janitor::clean_names() |> 
+  select(line, station_name, station_latitude, station_longitude,
+         route1:route11, entry, vending, entrance_type, ada) |> 
+  mutate(entry = if_else(entry == "YES", TRUE, FALSE))
 ```
 
-## Including Plots
+This dataset contains information on each entrance and exit for each subway station in New York City. The variables retained are line, station name, station latitude/longitude, routes served (`route1` through `route11`), entry, vending, entrance type, and ADA compliance. I read in the data with `read_csv()`, cleaned the variable names with `janitor::clean_names()`, kept the specified variables with `select()`, and used `mutate()` to convert `entry` from "YES"/"NO" to a logical variable (`TRUE`/`FALSE`). The resulting dataset has `r nrow(transit_df)` rows and `r ncol(transit_df)` columns. The NAs in the route columns reflect stations that serve fewer than 11 routes, not missing data.
 
-You can also embed plots, for example:
+### Questions
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r}
+n_stations = 
+  transit_df |> 
+  distinct(line, station_name) |> 
+  nrow()
+
+n_ada = 
+  transit_df |> 
+  filter(ada) |> 
+  distinct(line, station_name) |> 
+  nrow()
+
+prop_no_vending = 
+  transit_df |> 
+  filter(vending == "NO") |> 
+  pull(entry) |> 
+  mean()
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+There are `r n_stations` distinct stations, `r n_ada` of which are ADA compliant. Approximately `r round(prop_no_vending * 100, 1)`% of station entrances/exits without vending allow entrance.
+
+### Reformatting route number and route name
+
+To make route number and route name distinct variables, I converted `route8` through `route11` to character so all route columns share the same type, then used `pivot_longer()` to collapse the 11 route columns into `route_number` and `route_name`, dropping empty route slots.
+
+```{r}
+transit_long_df = 
+  transit_df |> 
+  mutate(across(route8:route11, as.character)) |> 
+  pivot_longer(
+    route1:route11,
+    names_to = "route_number",
+    values_to = "route_name",
+    names_prefix = "route",
+    values_drop_na = TRUE
+  )
+```
+
+```{r}
+n_a_stations = 
+  transit_long_df |> 
+  filter(route_name == "A") |> 
+  distinct(line, station_name) |> 
+  nrow()
+
+n_a_ada = 
+  transit_long_df |> 
+  filter(route_name == "A", ada) |> 
+  distinct(line, station_name) |> 
+  nrow()
+```
+
+`r n_a_stations` distinct stations serve the A train, and `r n_a_ada` of those are ADA compliant.
