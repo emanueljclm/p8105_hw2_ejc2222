@@ -143,3 +143,71 @@ gwynnda_butts_june_2022 =
 ```
 
 The combined dataset contains `r nrow(trash_wheel_df)` observations, each representing a single dumpster of trash collected by Mr. Trash Wheel, Professor Trash Wheel, or Gwynnda. Key variables include `trash_wheel`, which identifies the source, along with `date`, `weight_tons`, `volume_cubic_yards`, specific items such as `plastic_bottles` and `cigarette_butts`, and `homes_powered`. We should note that `sports_balls` is only recorded for Mr. Trash Wheel, and `glass_bottles` is not recorded for Gwynnda, so these are NA for the other wheels. Professor Trash Wheel collected a total of `r prof_total_weight` tons of trash, and Gwynnda collected `r format(gwynnda_butts_june_2022, big.mark = ",")` cigarette butts in June 2022.
+
+## Problem 3
+
+### Baseline Demographics
+
+```{r}
+baseline_df = 
+  read_csv("./data/MCI_baseline.csv", skip = 1, na = c("NA", "", ".")) |> 
+  janitor::clean_names() |> 
+  mutate(
+    sex = case_match(sex, 1 ~ "male", 0 ~ "female"),
+    apoe4 = case_match(apoe4, 1 ~ "carrier", 0 ~ "non-carrier")
+  )
+
+demographics_df = 
+  baseline_df |> 
+  filter(is.na(age_at_onset) | age_at_onset > current_age)
+```
+
+```{r}
+n_recruited = nrow(baseline_df)
+n_eligible = nrow(demographics_df)
+
+n_mci = 
+  demographics_df |> 
+  filter(!is.na(age_at_onset)) |> 
+  nrow()
+
+mean_age = mean(demographics_df$current_age)
+
+prop_women_apoe4 = 
+  demographics_df |> 
+  filter(sex == "female") |> 
+  summarize(prop = mean(apoe4 == "carrier")) |> 
+  pull(prop)
+```
+
+### Longitudinal Amyloid Data
+
+```{r}
+amyloid_df = 
+  read_csv("./data/mci_amyloid.csv", skip = 1, na = c("NA", "Na")) |> 
+  janitor::clean_names() |> 
+  rename(id = study_id, time_0 = baseline) |> 
+  pivot_longer(
+    time_0:time_8,
+    names_to = "years_since_baseline",
+    names_prefix = "time_",
+    names_transform = as.numeric,
+    values_to = "amyloid_ratio"
+  )
+```
+
+### Checking Overlap and Combining
+
+```{r}
+only_baseline = anti_join(demographics_df, amyloid_df, by = "id")
+
+only_amyloid = 
+  anti_join(amyloid_df, demographics_df, by = "id") |> 
+  distinct(id)
+
+mci_df = inner_join(demographics_df, amyloid_df, by = "id")
+
+write_csv(mci_df, "./data/mci_combined.csv")
+```
+
+483 participants were recruited and 4 had MCI at or before baseline and were excluded, which leaves 479. During follow-up: 93 of the 479 developed MCI. The average age at baseline was 65.0 years. Among women, 30% of women (63 of 210) are carriers of APOE4. In the combined dataset, there are 471 participants, and its dimensions are 2,355 rows, and 8 columns.
